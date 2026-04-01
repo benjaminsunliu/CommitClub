@@ -29,7 +29,7 @@ export default function Index() {
           </View>
 
           <View style={styles.actions}>
-            <AppButton label="Get started" onPress={() => router.push("/sign-in")} />
+            <AppButton label="Get started" onPress={() => router.push("/sign-up")} />
 
             <AppButton
               label="I have a pod code"

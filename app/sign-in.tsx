@@ -1,8 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
+import { FirebaseError } from "firebase/app";
+import { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Pressable,
   StyleSheet,
@@ -12,10 +14,60 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppButton } from "../components/AppButton";
+import { loginUser } from "../services/authService";
+
+function getLoginErrorMessage(error: unknown) {
+  if (!(error instanceof FirebaseError)) {
+    return "Something went wrong. Please try again.";
+  }
+
+  switch (error.code) {
+    case "auth/invalid-email":
+      return "Please enter a valid email address.";
+    case "auth/invalid-credential":
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+      return "Email or password is incorrect.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait and try again.";
+    case "auth/network-request-failed":
+      return "Network issue. Check your connection and retry.";
+    default:
+      return "Could not sign in. Please try again.";
+  }
+}
 
 export default function SignInScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const trimmedEmail = useMemo(() => email.trim(), [email]);
+
+  async function handleSignIn() {
+    if (!trimmedEmail) {
+      setError("Please enter your email.");
+      return;
+    }
+
+    if (!password) {
+      setError("Please enter your password.");
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      await loginUser(trimmedEmail, password);
+      router.replace("/(tabs)/home");
+    } catch (loginError) {
+      setError(getLoginErrorMessage(loginError));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <SafeAreaView style={styles.root}>
@@ -40,6 +92,7 @@ export default function SignInScreen() {
               keyboardType="email-address"
               value={email}
               onChangeText={setEmail}
+              editable={!isSubmitting}
             />
           </View>
 
@@ -52,22 +105,33 @@ export default function SignInScreen() {
               secureTextEntry
               value={password}
               onChangeText={setPassword}
+              editable={!isSubmitting}
             />
           </View>
 
           <AppButton
-            label="Sign in"
+            label={isSubmitting ? "Signing in..." : "Sign in"}
             size="tall"
             style={styles.signInButton}
             textStyle={styles.signInText}
-            onPress={() => router.replace("/home")}
+            onPress={handleSignIn}
+            disabled={isSubmitting}
           />
+
+          {isSubmitting && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color="#2E7876" />
+              <Text style={styles.loadingText}>Checking your account</Text>
+            </View>
+          )}
+
+          {error && <Text style={styles.errorText}>{error}</Text>}
         </View>
 
         <View style={styles.footer}>
           <Text style={styles.privacyText}>Your pod is private. No public rankings.</Text>
 
-          <Pressable onPress={() => router.replace("/")}>
+          <Pressable onPress={() => router.push("./sign-up")}>
             <Text style={styles.signupText}>Don&apos;t have an account? Sign up</Text>
           </Pressable>
         </View>
@@ -142,6 +206,26 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: "Inter_500Medium",
     letterSpacing: 0,
+  },
+  loadingRow: {
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  loadingText: {
+    color: "#5B6875",
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+  },
+  errorText: {
+    marginTop: 4,
+    color: "#B23A3A",
+    textAlign: "center",
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: "Inter_500Medium",
   },
   footer: {
     marginTop: 32,

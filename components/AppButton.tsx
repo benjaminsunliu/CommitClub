@@ -4,6 +4,7 @@ import { commonStyles } from "../theme/commonStyles";
 type AppButtonProps = {
     label: string;
     onPress: () => void;
+    disabled?: boolean;
     variant?: "primary" | "secondary";
     size?: "regular" | "tall";
     style?: StyleProp<ViewStyle>;
@@ -13,6 +14,7 @@ type AppButtonProps = {
 export function AppButton({
     label,
     onPress,
+    disabled = false,
     variant = "primary",
     size = "regular",
     style,
@@ -28,10 +30,12 @@ export function AppButton({
             style={({ pressed }) => [
                 containerStyle,
                 size === "tall" && { height: 72 },
-                pressed && commonStyles.buttonPressed,
+                pressed && !disabled && commonStyles.buttonPressed,
+                disabled && { opacity: 0.65 },
                 style,
             ]}
             onPress={onPress}
+            disabled={disabled}
         >
             <Text style={[labelStyle, textStyle]}>{label}</Text>
         </Pressable>
