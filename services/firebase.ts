@@ -9,7 +9,7 @@ import {
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAnXwdeW4YFKvO0JcbSi5OqNjZzPZYOWC0",
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
   authDomain: "commitclub-10b9b.firebaseapp.com",
   projectId: "commitclub-10b9b",
   storageBucket: "commitclub-10b9b.firebasestorage.app",
