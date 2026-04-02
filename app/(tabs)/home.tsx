@@ -300,7 +300,8 @@ export default function HomeScreen() {
             }
 
             setTodayCheckInStatus(status);
-            setCheckInFeedback("Check-in saved.");
+            setCheckInFeedback(null);
+            router.push(`../check-in-feedback/${status}`);
         } catch {
             setCheckInFeedback("Could not save check-in. Try again.");
         } finally {
@@ -465,7 +466,7 @@ const styles = StyleSheet.create({
         gap: 14,
     },
     optionCardSelected: {
-        borderWidth: 2,
+        borderWidth: 4,
         borderColor: "#25323E",
     },
     optionCardDisabled: {

@@ -138,7 +138,15 @@ export default function RootLayout() {
     );
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        animation: "fade",
+        animationDuration: 180,
+      }}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
