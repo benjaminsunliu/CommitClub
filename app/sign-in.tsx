@@ -61,7 +61,6 @@ export default function SignInScreen() {
 
     try {
       await loginUser(trimmedEmail, password);
-      router.replace("/(tabs)/home");
     } catch (loginError) {
       setError(getLoginErrorMessage(loginError));
     } finally {

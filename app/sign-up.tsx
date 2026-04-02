@@ -74,10 +74,7 @@ export default function SignUpScreen() {
 
         try {
             await registerUser(trimmedName, trimmedEmail, password);
-            setSuccess("Account created! Redirecting to Home...");
-            setTimeout(() => {
-                router.replace("/(tabs)/home");
-            }, 700);
+            setSuccess("Account created! Taking you to pod setup...");
         } catch (registerError) {
             setError(getRegisterErrorMessage(registerError));
         } finally {
