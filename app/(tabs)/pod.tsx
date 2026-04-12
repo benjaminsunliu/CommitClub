@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Clipboard,
+    Modal,
     Pressable,
     ScrollView,
     Share,
@@ -28,13 +29,32 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "@/services/firebase";
 
 const MAX_POD_MEMBERS = 4;
-const supportiveMessages = [
-    "💚 You got this",
-    "👏 Keep going",
-    "🌟 Proud of you",
-    "🫶 We are with you",
-    "🔥 Great momentum",
-];
+const supportiveReactions = [
+    {
+        id: "you-got-this",
+        label: "You got this",
+        message: "💚 You got this",
+        iconType: "feather" as const,
+        iconName: "heart" as const,
+        color: "#72BE86",
+    },
+    {
+        id: "new-day-new-start",
+        label: "New day, new start",
+        message: "✨ New day, new start",
+        iconType: "ionicons" as const,
+        iconName: "sparkles-outline" as const,
+        color: "#E2B85B",
+    },
+    {
+        id: "proud-of-you",
+        label: "Proud of you",
+        message: "🎉 Proud of you",
+        iconType: "feather" as const,
+        iconName: "star" as const,
+        color: "#C3B2DD",
+    },
+] as const;
 
 type PodMember = {
     id: string;
@@ -127,9 +147,26 @@ function getInitialFromName(name: string) {
     return name.trim().charAt(0).toUpperCase() || "M";
 }
 
-function pickRandomSupportiveMessage() {
-    const index = Math.floor(Math.random() * supportiveMessages.length);
-    return supportiveMessages[index];
+type SupportReactionOption = (typeof supportiveReactions)[number];
+
+function ReactionIcon({ option }: { option: SupportReactionOption }) {
+    if (option.iconType === "ionicons") {
+        return (
+            <Ionicons
+                name={option.iconName}
+                size={34}
+                color={option.color}
+            />
+        );
+    }
+
+    return (
+        <Feather
+            name={option.iconName}
+            size={34}
+            color={option.color}
+        />
+    );
 }
 
 export default function PodScreen() {
@@ -145,6 +182,7 @@ export default function PodScreen() {
     const [recentSupports, setRecentSupports] = useState<SupportEntry[]>([]);
 
     const [isSendingSupport, setIsSendingSupport] = useState(false);
+    const [isSupportPickerVisible, setIsSupportPickerVisible] = useState(false);
     const [sendSupportFeedback, setSendSupportFeedback] = useState<string | null>(null);
     const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
 
@@ -172,6 +210,7 @@ export default function PodScreen() {
                 setCurrentUserId(null);
                 setCurrentUserName("Member");
                 setPodId(null);
+                setIsSupportPickerVisible(false);
                 return;
             }
 
@@ -214,6 +253,7 @@ export default function PodScreen() {
             setMemberIds([]);
             setCheckedInTodayCount(0);
             setRecentSupports([]);
+            setIsSupportPickerVisible(false);
             return;
         }
 
@@ -393,21 +433,41 @@ export default function PodScreen() {
         };
     }, [podId]);
 
-    async function handleSendSupportReaction() {
+    function handleOpenSupportPicker() {
         if (!podId || !currentUserId) {
             setSendSupportFeedback("Join a pod first.");
             return;
         }
 
+        setSendSupportFeedback(null);
+        setIsSupportPickerVisible(true);
+    }
+
+    function handleCloseSupportPicker() {
+        if (isSendingSupport) {
+            return;
+        }
+
+        setIsSupportPickerVisible(false);
+    }
+
+    async function handleSendSupportReaction(message: string) {
+        if (!podId || !currentUserId) {
+            setSendSupportFeedback("Join a pod first.");
+            setIsSupportPickerVisible(false);
+            return;
+        }
+
         setIsSendingSupport(true);
         setSendSupportFeedback(null);
+        setIsSupportPickerVisible(false);
 
         try {
             await addDoc(collection(db, "podSupport"), {
                 podId,
                 fromUserId: currentUserId,
                 fromName: currentUserName,
-                message: pickRandomSupportiveMessage(),
+                message,
                 createdAt: serverTimestamp(),
             });
 
@@ -451,6 +511,40 @@ export default function PodScreen() {
     return (
         <SafeAreaView style={styles.root} edges={["top"]}>
             <StatusBar style="dark" />
+            <Modal
+                transparent
+                animationType="fade"
+                visible={isSupportPickerVisible}
+                onRequestClose={handleCloseSupportPicker}
+            >
+                <View style={styles.supportPickerOverlay}>
+                    <Pressable
+                        style={StyleSheet.absoluteFillObject}
+                        onPress={handleCloseSupportPicker}
+                        disabled={isSendingSupport}
+                    />
+
+                    <View style={styles.supportPickerCard}>
+                        {supportiveReactions.map((option) => (
+                            <Pressable
+                                key={option.id}
+                                style={({ pressed }) => [
+                                    styles.supportPickerOption,
+                                    pressed && !isSendingSupport && styles.supportPickerOptionPressed,
+                                    isSendingSupport && styles.supportPickerOptionDisabled,
+                                ]}
+                                onPress={() => {
+                                    void handleSendSupportReaction(option.message);
+                                }}
+                                disabled={isSendingSupport}
+                            >
+                                <ReactionIcon option={option} />
+                                <Text style={styles.supportPickerOptionText}>{option.label}</Text>
+                            </Pressable>
+                        ))}
+                    </View>
+                </View>
+            </Modal>
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
@@ -535,7 +629,7 @@ export default function PodScreen() {
                             pressed && canSendSupport && styles.sendSupportButtonPressed,
                             !canSendSupport && styles.sendSupportButtonDisabled,
                         ]}
-                        onPress={handleSendSupportReaction}
+                        onPress={handleOpenSupportPicker}
                         disabled={!canSendSupport}
                     >
                         {isSendingSupport ? (
@@ -793,6 +887,51 @@ const styles = StyleSheet.create({
         fontFamily: "Inter_400Regular",
         fontSize: 14,
         lineHeight: 20,
+    },
+    supportPickerOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(37, 50, 62, 0.12)",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 20,
+    },
+    supportPickerCard: {
+        width: "100%",
+        maxWidth: 520,
+        borderRadius: 28,
+        backgroundColor: "#FBFAF9",
+        paddingHorizontal: 22,
+        paddingVertical: 22,
+        gap: 10,
+        shadowColor: "#22313D",
+        shadowOffset: {
+            width: 0,
+            height: 10,
+        },
+        shadowOpacity: 0.08,
+        shadowRadius: 20,
+        elevation: 6,
+    },
+    supportPickerOption: {
+        minHeight: 84,
+        borderRadius: 22,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 14,
+    },
+    supportPickerOptionPressed: {
+        backgroundColor: "#F2F1EE",
+    },
+    supportPickerOptionDisabled: {
+        opacity: 0.65,
+    },
+    supportPickerOptionText: {
+        color: "#25323E",
+        fontFamily: "Inter_600SemiBold",
+        fontSize: 17,
+        lineHeight: 22,
     },
     inviteCard: {
         marginTop: 2,
