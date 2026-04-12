@@ -2,6 +2,7 @@ import { Fraunces_500Medium, Fraunces_600SemiBold } from "@expo-google-fonts/fra
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import { useFonts } from "expo-font";
 import { Href, router, Stack, useRootNavigationState, useSegments } from "expo-router";
+import Head from "expo-router/head";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -139,13 +140,18 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: "fade",
-        animationDuration: 180,
-      }}
-    />
+    <>
+      <Head>
+        <title>CommitClub</title>
+      </Head>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "fade",
+          animationDuration: 180,
+        }}
+      />
+    </>
   );
 }
 
