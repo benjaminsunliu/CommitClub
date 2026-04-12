@@ -96,11 +96,20 @@ type SettingCardProps = {
     icon: React.ComponentProps<typeof Feather>["name"];
     title: string;
     subtitle: string;
+    href: Href;
 };
 
-function SettingCard({ icon, title, subtitle }: SettingCardProps) {
+function SettingCard({ icon, title, subtitle, href }: SettingCardProps) {
     return (
-        <View style={styles.settingCard}>
+        <Pressable
+            style={({ pressed }) => [
+                styles.settingCard,
+                pressed && styles.settingCardPressed,
+            ]}
+            onPress={() => {
+                router.push(href);
+            }}
+        >
             <View style={styles.settingIconWrap}>
                 <Feather name={icon} size={28} color="#5F6C77" />
             </View>
@@ -108,7 +117,8 @@ function SettingCard({ icon, title, subtitle }: SettingCardProps) {
                 <Text style={styles.settingTitle}>{title}</Text>
                 <Text style={styles.settingSubtitle}>{subtitle}</Text>
             </View>
-        </View>
+            <Feather name="chevron-right" size={22} color="#8D99A3" />
+        </Pressable>
     );
 }
 
@@ -275,17 +285,20 @@ export default function ProfileScreen() {
                     <SettingCard
                         icon="user"
                         title="Personal Info"
-                        subtitle="Name and preferences"
+                        subtitle="Name and email"
+                        href="/personal-info"
                     />
                     <SettingCard
                         icon="bell"
                         title="Reminders"
-                        subtitle="Gentle check-in reminders"
+                        subtitle="Check-in and support alerts"
+                        href="/reminders"
                     />
                     <SettingCard
                         icon="shield"
                         title="Privacy"
-                        subtitle="Your data stays private"
+                        subtitle="What your pod can see"
+                        href="/privacy"
                     />
 
                     <Pressable
@@ -438,6 +451,9 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 14,
+    },
+    settingCardPressed: {
+        opacity: 0.82,
     },
     settingIconWrap: {
         width: 60,

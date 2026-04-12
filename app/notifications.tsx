@@ -20,6 +20,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "@/services/firebase";
+import {
+    defaultReminderPreferences,
+    normalizeReminderPreferences,
+    ReminderWindow,
+} from "@/services/userSettingsService";
 
 type CheckInStatus = "done" | "partial" | "missed";
 
@@ -115,6 +120,18 @@ function getDateAtHour(hour: number, dayOffset = 0) {
     return date;
 }
 
+function getReminderHour(reminderWindow: ReminderWindow) {
+    if (reminderWindow === "Morning") {
+        return 9;
+    }
+
+    if (reminderWindow === "Afternoon") {
+        return 14;
+    }
+
+    return 19;
+}
+
 function getRelativeTimeText(date: Date | null) {
     if (!date) {
         return "just now";
@@ -179,6 +196,9 @@ function NotificationCard({ item }: { item: NotificationItem }) {
 export default function NotificationsScreen() {
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [podId, setPodId] = useState<string | null>(null);
+    const [reminderPreferences, setReminderPreferences] = useState(
+        defaultReminderPreferences,
+    );
     const [memberCount, setMemberCount] = useState(0);
     const [podCheckins, setPodCheckins] = useState<PodCheckinRecord[]>([]);
     const [podSupports, setPodSupports] = useState<PodSupportRecord[]>([]);
@@ -193,6 +213,7 @@ export default function NotificationsScreen() {
             if (!user) {
                 setCurrentUserId(null);
                 setPodId(null);
+                setReminderPreferences(defaultReminderPreferences);
                 setMemberCount(0);
                 setPodCheckins([]);
                 setPodSupports([]);
@@ -207,11 +228,17 @@ export default function NotificationsScreen() {
             unsubscribeUserDoc = onSnapshot(
                 userRef,
                 (snapshot) => {
-                    const data = snapshot.data() as { podId?: string | null } | undefined;
+                    const data = snapshot.data() as
+                        | { podId?: string | null; reminders?: unknown }
+                        | undefined;
                     setPodId(data?.podId ?? null);
+                    setReminderPreferences(
+                        normalizeReminderPreferences(data?.reminders),
+                    );
                 },
                 () => {
                     setPodId(null);
+                    setReminderPreferences(defaultReminderPreferences);
                     setIsLoading(false);
                 },
             );
@@ -359,6 +386,7 @@ export default function NotificationsScreen() {
 
     const notifications = useMemo<NotificationItem[]>(() => {
         const todayKey = getTodayDateKey();
+        const reminderHour = getReminderHour(reminderPreferences.reminderWindow);
         const todayCheckins = podCheckins.filter((checkin) => checkin.date === todayKey);
         const checkedInTodayCount = new Set(
             todayCheckins
@@ -389,74 +417,80 @@ export default function NotificationsScreen() {
             tone: "active",
         });
 
-        if (latestSupport) {
-            items.push({
-                id: "latest-support",
-                icon: "heart",
-                iconColor: "#72BE86",
-                title: `New support from ${latestSupport.senderName}`,
-                body: latestSupport.message,
-                timeLabel: getRelativeTimeText(latestSupport.createdAt),
-                tone: "support",
-            });
-        } else {
-            items.push({
-                id: "support-nudge",
-                icon: "heart",
-                iconColor: "#72BE86",
-                title: "A little support goes a long way",
-                body: "Send a supportive reaction to lift someone in your pod today.",
-                timeLabel: getRelativeTimeText(getDateAtHour(9)),
-                tone: "support",
-            });
+        if (reminderPreferences.podSupportEnabled) {
+            if (latestSupport) {
+                items.push({
+                    id: "latest-support",
+                    icon: "heart",
+                    iconColor: "#72BE86",
+                    title: `New support from ${latestSupport.senderName}`,
+                    body: latestSupport.message,
+                    timeLabel: getRelativeTimeText(latestSupport.createdAt),
+                    tone: "support",
+                });
+            } else {
+                items.push({
+                    id: "support-nudge",
+                    icon: "heart",
+                    iconColor: "#72BE86",
+                    title: "A little support goes a long way",
+                    body: "Send a supportive reaction to lift someone in your pod today.",
+                    timeLabel: getRelativeTimeText(getDateAtHour(9)),
+                    tone: "support",
+                });
+            }
         }
 
-        if (todayUserCheckin) {
-            items.push({
-                id: "today-checkin",
-                icon: "bell",
-                iconColor: "#A8CBB8",
-                title: "Today's check-in is in",
-                body: `You marked today as ${getCheckInStatusLabel(todayUserCheckin.status)}.`,
-                timeLabel: getRelativeTimeText(todayUserCheckin.activityAt),
-                tone: "reminder",
-            });
+        if (reminderPreferences.dailyCheckInEnabled) {
+            if (todayUserCheckin) {
+                items.push({
+                    id: "today-checkin",
+                    icon: "bell",
+                    iconColor: "#A8CBB8",
+                    title: "Today's check-in is in",
+                    body: `You marked today as ${getCheckInStatusLabel(todayUserCheckin.status)}.`,
+                    timeLabel: getRelativeTimeText(
+                        todayUserCheckin.activityAt ?? getDateAtHour(reminderHour),
+                    ),
+                    tone: "reminder",
+                });
 
-            items.push({
-                id: "next-step",
-                icon: "bell",
-                iconColor: "#A8CBB8",
-                title: "Nice work showing up",
-                body: "Your next small check-in tomorrow will keep the rhythm going.",
-                timeLabel: getRelativeTimeText(getDateAtHour(8, -1)),
-                tone: "reminder",
-                highlighted: true,
-            });
-        } else {
-            items.push({
-                id: "checkin-reminder",
-                icon: "bell",
-                iconColor: "#A8CBB8",
-                title: "Quick check-in for today?",
-                body: "How did your habit go today?",
-                timeLabel: getRelativeTimeText(getDateAtHour(12)),
-                tone: "reminder",
-            });
+                items.push({
+                    id: "next-step",
+                    icon: "bell",
+                    iconColor: "#A8CBB8",
+                    title: "Nice work showing up",
+                    body: "Your next small check-in tomorrow will keep the rhythm going.",
+                    timeLabel: getRelativeTimeText(getDateAtHour(reminderHour, -1)),
+                    tone: "reminder",
+                    highlighted: true,
+                });
+            } else {
+                items.push({
+                    id: "checkin-reminder",
+                    icon: "bell",
+                    iconColor: "#A8CBB8",
+                    title: "Quick check-in for today?",
+                    body: "How did your habit go today?",
+                    timeLabel: getRelativeTimeText(getDateAtHour(reminderHour)),
+                    tone: "reminder",
+                });
 
-            items.push({
-                id: "new-day",
-                icon: "bell",
-                iconColor: "#A8CBB8",
-                title: "New day, new start",
-                body: "Ready to check in?",
-                timeLabel: getRelativeTimeText(getDateAtHour(8, -1)),
-                tone: "reminder",
-                highlighted: true,
-            });
+                items.push({
+                    id: "new-day",
+                    icon: "bell",
+                    iconColor: "#A8CBB8",
+                    title: "New day, new start",
+                    body: "Ready to check in?",
+                    timeLabel: getRelativeTimeText(getDateAtHour(reminderHour, -1)),
+                    tone: "reminder",
+                    highlighted: true,
+                });
+            }
         }
 
         return items;
-    }, [currentUserId, memberCount, podCheckins, podSupports]);
+    }, [currentUserId, memberCount, podCheckins, podSupports, reminderPreferences]);
 
     return (
         <SafeAreaView style={styles.root} edges={["top"]}>
