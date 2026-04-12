@@ -283,11 +283,6 @@ export default function ProfileScreen() {
                         subtitle="Gentle check-in reminders"
                     />
                     <SettingCard
-                        icon="droplet"
-                        title="Appearance"
-                        subtitle="Theme and colors"
-                    />
-                    <SettingCard
                         icon="shield"
                         title="Privacy"
                         subtitle="Your data stays private"

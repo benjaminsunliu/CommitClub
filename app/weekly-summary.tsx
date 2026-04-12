@@ -90,70 +90,72 @@ export default function WeeklySummaryScreen() {
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
-                <Pressable
-                    style={({ pressed }) => [
-                        styles.backButton,
-                        pressed && styles.backButtonPressed,
-                    ]}
-                    onPress={handleBack}
-                >
-                    <Feather name="arrow-left" size={30} color="#25323E" />
-                </Pressable>
+                <View style={styles.content}>
+                    <Pressable
+                        style={({ pressed }) => [
+                            styles.backButton,
+                            pressed && styles.backButtonPressed,
+                        ]}
+                        onPress={handleBack}
+                    >
+                        <Feather name="arrow-left" size={30} color="#25323E" />
+                    </Pressable>
 
-                <View style={styles.heroWrap}>
-                    <View style={styles.heroIconCircle}>
-                        <Feather name="calendar" size={38} color="#2D6E71" />
+                    <View style={styles.heroWrap}>
+                        <View style={styles.heroIconCircle}>
+                            <Feather name="calendar" size={38} color="#2D6E71" />
+                        </View>
+                        <Text style={styles.pageTitle}>
+                            {isLoading ? "This week" : `Week of ${weekTitle}`}
+                        </Text>
+                        <Text style={styles.pageSubtitle}>Here&apos;s how you did</Text>
                     </View>
-                    <Text style={styles.pageTitle}>
-                        {isLoading ? "This week" : `Week of ${weekTitle}`}
-                    </Text>
-                    <Text style={styles.pageSubtitle}>Here&apos;s how you did</Text>
+
+                    <SummaryCard
+                        accentBackground="#E3F0E3"
+                        title="Total check-ins"
+                        value={totalCheckinsValue}
+                        body={totalCheckinsBody}
+                        icon={<Feather name="check-circle" size={36} color="#72BE86" />}
+                    />
+
+                    <SummaryCard
+                        accentBackground="#FBF3DE"
+                        title="Partials count"
+                        value={partialsValue}
+                        body={partialsBody}
+                        icon={<PartialRing />}
+                    />
+
+                    <SummaryCard
+                        accentBackground="#F0EAF8"
+                        title="Recovery"
+                        body={recoveryBody}
+                        icon={<Feather name="heart" size={34} color="#C5B0DE" />}
+                    />
+
+                    <LinearGradient
+                        colors={["#A8CBB8", "#3E7E79"]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.supportCard}
+                    >
+                        <Text style={styles.supportTitle}>Pod support</Text>
+                        <Text style={styles.supportBody}>{podSupportBody}</Text>
+                    </LinearGradient>
+
+                    <View style={styles.movingForwardCard}>
+                        <Text style={styles.movingForwardTitle}>Moving forward</Text>
+                        <Text style={styles.movingForwardBody}>{movingForwardBody}</Text>
+                    </View>
+
+                    <AppButton
+                        label="Start this week"
+                        onPress={handleStartWeek}
+                        style={styles.startButton}
+                        textStyle={styles.startButtonText}
+                    />
                 </View>
-
-                <SummaryCard
-                    accentBackground="#E3F0E3"
-                    title="Total check-ins"
-                    value={totalCheckinsValue}
-                    body={totalCheckinsBody}
-                    icon={<Feather name="check-circle" size={36} color="#72BE86" />}
-                />
-
-                <SummaryCard
-                    accentBackground="#FBF3DE"
-                    title="Partials count"
-                    value={partialsValue}
-                    body={partialsBody}
-                    icon={<PartialRing />}
-                />
-
-                <SummaryCard
-                    accentBackground="#F0EAF8"
-                    title="Recovery"
-                    body={recoveryBody}
-                    icon={<Feather name="heart" size={34} color="#C5B0DE" />}
-                />
-
-                <LinearGradient
-                    colors={["#A8CBB8", "#3E7E79"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.supportCard}
-                >
-                    <Text style={styles.supportTitle}>Pod support</Text>
-                    <Text style={styles.supportBody}>{podSupportBody}</Text>
-                </LinearGradient>
-
-                <View style={styles.movingForwardCard}>
-                    <Text style={styles.movingForwardTitle}>Moving forward</Text>
-                    <Text style={styles.movingForwardBody}>{movingForwardBody}</Text>
-                </View>
-
-                <AppButton
-                    label="Start this week"
-                    onPress={handleStartWeek}
-                    style={styles.startButton}
-                    textStyle={styles.startButtonText}
-                />
             </ScrollView>
         </SafeAreaView>
     );
@@ -165,8 +167,13 @@ const styles = StyleSheet.create({
         backgroundColor: "#F3F1EE",
     },
     scrollContent: {
-        paddingHorizontal: 18,
         paddingBottom: 24,
+    },
+    content: {
+        width: "100%",
+        maxWidth: 520,
+        alignSelf: "center",
+        paddingHorizontal: 18,
     },
     backButton: {
         width: 40,
