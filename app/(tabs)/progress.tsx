@@ -1,221 +1,16 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { onAuthStateChanged } from "firebase/auth";
-import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
-import { useEffect, useState } from "react";
-import {
-    Alert,
-    Pressable,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppButton } from "@/components/AppButton";
-import { auth, db } from "@/services/firebase";
-
-type CheckInStatus = "done" | "partial" | "missed";
-type WeekStatus = CheckInStatus | "pending";
-
-type BasicCheckIn = {
-    date: string;
-    status: CheckInStatus;
-};
-
-type WeekDay = {
-    label: string;
-    date: Date;
-    dateKey: string;
-    status: WeekStatus;
-};
-
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
-const STATUS_COLORS: Record<WeekStatus, string> = {
-    done: "#7EC089",
-    partial: "#E9C36F",
-    missed: "#BCAAD7",
-    pending: "#DDDDDD",
-};
-
-function isCheckInStatus(value: unknown): value is CheckInStatus {
-    return value === "done" || value === "partial" || value === "missed";
-}
-
-function startOfDay(value: Date) {
-    const date = new Date(value);
-    date.setHours(0, 0, 0, 0);
-    return date;
-}
-
-function addDays(value: Date, count: number) {
-    const date = new Date(value);
-    date.setDate(date.getDate() + count);
-    return date;
-}
-
-function formatDateKey(value: Date) {
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, "0");
-    const day = String(value.getDate()).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
-}
-
-function getStartOfWeek(referenceDate: Date) {
-    const normalizedReference = startOfDay(referenceDate);
-    const currentDay = normalizedReference.getDay();
-    const offset = currentDay === 0 ? -6 : 1 - currentDay;
-
-    return addDays(normalizedReference, offset);
-}
-
-function buildWeekDays(checkins: BasicCheckIn[], referenceDate: Date): WeekDay[] {
-    const checkinsByDate = new Map<string, CheckInStatus>();
-
-    for (const checkin of checkins) {
-        checkinsByDate.set(checkin.date, checkin.status);
-    }
-
-    const start = getStartOfWeek(referenceDate);
-
-    return WEEKDAY_LABELS.map((label, index) => {
-        const date = addDays(start, index);
-        const dateKey = formatDateKey(date);
-        const status: WeekStatus = checkinsByDate.get(dateKey) ?? "pending";
-
-        return {
-            label,
-            date,
-            dateKey,
-            status,
-        };
-    });
-}
-
-function pluralizeDay(count: number) {
-    return count === 1 ? "day" : "days";
-}
-
-function pluralizeCheckIn(count: number) {
-    return count === 1 ? "check-in" : "check-ins";
-}
-
-function getHeroMessage(checkInCount: number, missedCount: number) {
-    if (checkInCount >= 5) {
-        return "You're building consistency";
-    }
-
-    if (checkInCount >= 3) {
-        return "You're keeping momentum";
-    }
-
-    if (checkInCount >= 1) {
-        return "Every check-in still counts";
-    }
-
-    if (missedCount > 0) {
-        return "Tomorrow is a fresh reset";
-    }
-
-    return "A new streak can start today";
-}
-
-function getRecoveryInsight(weekDays: WeekDay[], checkInCount: number, missedCount: number) {
-    let currentMissedStretch = 0;
-    let recoveredAfterMisses: number | null = null;
-
-    for (const day of weekDays) {
-        if (day.status === "missed") {
-            currentMissedStretch += 1;
-            continue;
-        }
-
-        if (day.status === "done" || day.status === "partial") {
-            if (currentMissedStretch > 0) {
-                recoveredAfterMisses = currentMissedStretch;
-            }
-
-            currentMissedStretch = 0;
-            continue;
-        }
-
-        currentMissedStretch = 0;
-    }
-
-    if (recoveredAfterMisses) {
-        return `You bounced back after ${recoveredAfterMisses} missed ${pluralizeDay(recoveredAfterMisses)}. That's what matters most.`;
-    }
-
-    if (checkInCount >= 5) {
-        return "You've kept showing up and that steady rhythm is starting to stick.";
-    }
-
-    if (missedCount === 0 && checkInCount > 0) {
-        return "No missed days yet. Keep that steady rhythm going.";
-    }
-
-    if (checkInCount > 0) {
-        return "Each check-in is a reset. Progress builds from small returns.";
-    }
-
-    return "Your next check-in can restart the rhythm for this week.";
-}
-
-function getPodActiveDays(podCheckins: BasicCheckIn[], weekDays: WeekDay[]) {
-    const currentWeekKeys = new Set(weekDays.map((day) => day.dateKey));
-    const activeDays = new Set<string>();
-
-    for (const checkin of podCheckins) {
-        if (currentWeekKeys.has(checkin.date)) {
-            activeDays.add(checkin.date);
-        }
-    }
-
-    return activeDays.size;
-}
-
-function getWeekRangeLabel(weekDays: WeekDay[]) {
-    const formatter = new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "numeric",
-    });
-
-    const firstDay = weekDays[0];
-    const lastDay = weekDays[weekDays.length - 1];
-
-    return `${formatter.format(firstDay.date)} - ${formatter.format(lastDay.date)}`;
-}
-
-function createSummaryText({
-    weekRangeLabel,
-    checkInCount,
-    doneCount,
-    partialCount,
-    missedCount,
-    podActiveDays,
-    recoveryInsight,
-}: {
-    weekRangeLabel: string;
-    checkInCount: number;
-    doneCount: number;
-    partialCount: number;
-    missedCount: number;
-    podActiveDays: number;
-    recoveryInsight: string;
-}) {
-    return [
-        `Week of ${weekRangeLabel}`,
-        `${checkInCount} ${pluralizeCheckIn(checkInCount)}`,
-        `Done: ${doneCount} ${pluralizeDay(doneCount)}`,
-        `Partial: ${partialCount} ${pluralizeDay(partialCount)}`,
-        `Missed: ${missedCount} ${pluralizeDay(missedCount)}`,
-        `Pod active: ${podActiveDays} out of 7 days`,
-        recoveryInsight,
-    ].join("\n");
-}
+import {
+    STATUS_COLORS,
+    pluralizeCheckIn,
+    pluralizeDay,
+    useWeeklyProgressData,
+} from "@/hooks/useWeeklyProgress";
 
 type LegendRowProps = {
     color: string;
@@ -238,210 +33,24 @@ function LegendRow({ color, label, value }: LegendRowProps) {
 }
 
 export default function ProgressScreen() {
-    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-    const [podId, setPodId] = useState<string | null>(null);
-    const [userCheckins, setUserCheckins] = useState<BasicCheckIn[]>([]);
-    const [podCheckins, setPodCheckins] = useState<BasicCheckIn[]>([]);
-    const [isAuthReady, setIsAuthReady] = useState(false);
-    const [isPodMembershipLoading, setIsPodMembershipLoading] = useState(true);
-    const [isUserCheckinsLoading, setIsUserCheckinsLoading] = useState(true);
-    const [isPodCheckinsLoading, setIsPodCheckinsLoading] = useState(true);
-
-    useEffect(() => {
-        let unsubscribeUserDoc: (() => void) | undefined;
-
-        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-            unsubscribeUserDoc?.();
-            setIsAuthReady(true);
-
-            if (!user) {
-                setCurrentUserId(null);
-                setPodId(null);
-                setUserCheckins([]);
-                setPodCheckins([]);
-                setIsPodMembershipLoading(false);
-                setIsUserCheckinsLoading(false);
-                setIsPodCheckinsLoading(false);
-                return;
-            }
-
-            setCurrentUserId(user.uid);
-            setIsPodMembershipLoading(true);
-            setIsUserCheckinsLoading(true);
-            setIsPodCheckinsLoading(true);
-
-            const userRef = doc(db, "users", user.uid);
-            unsubscribeUserDoc = onSnapshot(
-                userRef,
-                (snapshot) => {
-                    const data = snapshot.data() as { podId?: string | null } | undefined;
-                    setPodId(data?.podId ?? null);
-                    setIsPodMembershipLoading(false);
-                },
-                () => {
-                    setPodId(null);
-                    setIsPodMembershipLoading(false);
-                    setIsPodCheckinsLoading(false);
-                },
-            );
-        });
-
-        return () => {
-            unsubscribeUserDoc?.();
-            unsubscribeAuth();
-        };
-    }, []);
-
-    useEffect(() => {
-        if (!currentUserId) {
-            setUserCheckins([]);
-            setIsUserCheckinsLoading(false);
-            return;
-        }
-
-        setIsUserCheckinsLoading(true);
-        const userCheckinsQuery = query(
-            collection(db, "checkins"),
-            where("userId", "==", currentUserId),
-        );
-
-        const unsubscribe = onSnapshot(
-            userCheckinsQuery,
-            (snapshot) => {
-                const nextCheckins = snapshot.docs
-                    .map((docSnapshot) => {
-                        const data = docSnapshot.data() as {
-                            date?: unknown;
-                            status?: unknown;
-                        };
-                        const date = typeof data.date === "string" ? data.date.trim() : "";
-
-                        if (!date || !isCheckInStatus(data.status)) {
-                            return null;
-                        }
-
-                        return {
-                            date,
-                            status: data.status,
-                        };
-                    })
-                    .filter((checkin): checkin is BasicCheckIn => Boolean(checkin));
-
-                setUserCheckins(nextCheckins);
-                setIsUserCheckinsLoading(false);
-            },
-            () => {
-                setUserCheckins([]);
-                setIsUserCheckinsLoading(false);
-            },
-        );
-
-        return () => {
-            unsubscribe();
-        };
-    }, [currentUserId]);
-
-    useEffect(() => {
-        if (!podId) {
-            setPodCheckins([]);
-            setIsPodCheckinsLoading(false);
-            return;
-        }
-
-        setIsPodCheckinsLoading(true);
-        const podCheckinsQuery = query(
-            collection(db, "checkins"),
-            where("podId", "==", podId),
-        );
-
-        const unsubscribe = onSnapshot(
-            podCheckinsQuery,
-            (snapshot) => {
-                const nextCheckins = snapshot.docs
-                    .map((docSnapshot) => {
-                        const data = docSnapshot.data() as {
-                            date?: unknown;
-                            status?: unknown;
-                        };
-                        const date = typeof data.date === "string" ? data.date.trim() : "";
-
-                        if (!date || !isCheckInStatus(data.status)) {
-                            return null;
-                        }
-
-                        return {
-                            date,
-                            status: data.status,
-                        };
-                    })
-                    .filter((checkin): checkin is BasicCheckIn => Boolean(checkin));
-
-                setPodCheckins(nextCheckins);
-                setIsPodCheckinsLoading(false);
-            },
-            () => {
-                setPodCheckins([]);
-                setIsPodCheckinsLoading(false);
-            },
-        );
-
-        return () => {
-            unsubscribe();
-        };
-    }, [podId]);
-
-    const weekDays = buildWeekDays(userCheckins, new Date());
-    const doneCount = weekDays.filter((day) => day.status === "done").length;
-    const partialCount = weekDays.filter((day) => day.status === "partial").length;
-    const missedCount = weekDays.filter((day) => day.status === "missed").length;
-    const checkInCount = doneCount + partialCount;
-    const podActiveDays = getPodActiveDays(podCheckins, weekDays);
-    const heroMessage = getHeroMessage(checkInCount, missedCount);
-    const recoveryInsight = getRecoveryInsight(weekDays, checkInCount, missedCount);
-    const weekRangeLabel = getWeekRangeLabel(weekDays);
-    const summaryText = createSummaryText({
-        weekRangeLabel,
-        checkInCount,
+    const {
+        isLoading,
+        weekDays,
         doneCount,
         partialCount,
         missedCount,
+        checkInCount,
         podActiveDays,
+        heroMessage,
         recoveryInsight,
-    });
-
-    const isLoading =
-        !isAuthReady ||
-        isPodMembershipLoading ||
-        isUserCheckinsLoading ||
-        isPodCheckinsLoading;
-
-    async function handleShareWeeklySummary() {
-        try {
-            await Share.share({
-                message: summaryText,
-            });
-        } catch {
-            Alert.alert("Could not open the share sheet right now.");
-        }
-    }
+    } = useWeeklyProgressData();
 
     function handleViewWeeklySummary() {
         if (isLoading) {
             return;
         }
 
-        Alert.alert("Weekly summary", summaryText, [
-            {
-                text: "Close",
-                style: "cancel",
-            },
-            {
-                text: "Share",
-                onPress: () => {
-                    void handleShareWeeklySummary();
-                },
-            },
-        ]);
+        router.push("/weekly-summary");
     }
 
     return (
@@ -526,7 +135,9 @@ export default function ProgressScreen() {
                     <View style={styles.card}>
                         <Text style={styles.cardTitle}>Recovery insight</Text>
                         <Text style={styles.cardBody}>
-                            {isLoading ? "Looking at your recent pattern..." : recoveryInsight}
+                            {isLoading
+                                ? "Looking at your recent pattern..."
+                                : recoveryInsight}
                         </Text>
                     </View>
 
