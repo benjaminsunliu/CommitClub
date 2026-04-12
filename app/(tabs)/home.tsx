@@ -16,8 +16,9 @@ import {
     where,
 } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { buildWeekDays, pluralizeTime } from "@/hooks/useWeeklyProgress";
 import { auth, db } from "@/services/firebase";
 
 type CheckInStatus = "done" | "partial" | "missed";
@@ -108,6 +109,9 @@ export default function HomeScreen() {
     const [habitCategory, setHabitCategory] = useState("General");
     const [isHabitLoading, setIsHabitLoading] = useState(true);
     const [todayCheckInStatus, setTodayCheckInStatus] = useState<CheckInStatus | null>(null);
+    const [weeklyCheckInCount, setWeeklyCheckInCount] = useState(0);
+    const [podMemberCount, setPodMemberCount] = useState(0);
+    const [checkedInTodayCount, setCheckedInTodayCount] = useState(0);
     const [isSavingCheckIn, setIsSavingCheckIn] = useState(false);
     const [checkInFeedback, setCheckInFeedback] = useState<string | null>(null);
     const hasHabit = Boolean(currentHabitId);
@@ -154,6 +158,7 @@ export default function HomeScreen() {
                 setHabitCategory("General");
                 setIsHabitLoading(false);
                 setTodayCheckInStatus(null);
+                setWeeklyCheckInCount(0);
                 setCheckInFeedback(null);
                 return;
             }
@@ -232,14 +237,27 @@ export default function HomeScreen() {
                 checkinsQuery,
                 (snapshot) => {
                     const todayKey = getTodayDateKey();
-                    const todayCheckin = snapshot.docs
+                    const checkins = snapshot.docs
                         .map((docSnapshot) => docSnapshot.data() as { date?: string; status?: CheckInStatus })
-                        .find((checkin) => checkin.date === todayKey);
+                        .filter(
+                            (checkin): checkin is { date: string; status: CheckInStatus } =>
+                                typeof checkin.date === "string" &&
+                                (checkin.status === "done" ||
+                                    checkin.status === "partial" ||
+                                    checkin.status === "missed"),
+                        );
+                    const todayCheckin = checkins.find((checkin) => checkin.date === todayKey);
+                    const weekDays = buildWeekDays(checkins, new Date());
+                    const nextWeeklyCheckInCount = weekDays.filter(
+                        (day) => day.status === "done" || day.status === "partial",
+                    ).length;
 
                     setTodayCheckInStatus(todayCheckin?.status ?? null);
+                    setWeeklyCheckInCount(nextWeeklyCheckInCount);
                 },
                 () => {
                     setTodayCheckInStatus(null);
+                    setWeeklyCheckInCount(0);
                 },
             );
         });
@@ -251,6 +269,60 @@ export default function HomeScreen() {
             unsubscribeAuth();
         };
     }, []);
+
+    useEffect(() => {
+        if (!currentPodId) {
+            setPodMemberCount(0);
+            setCheckedInTodayCount(0);
+            return;
+        }
+
+        const podRef = doc(db, "pods", currentPodId);
+        const podCheckinsQuery = query(
+            collection(db, "checkins"),
+            where("podId", "==", currentPodId),
+            limit(300),
+        );
+        const todayKey = getTodayDateKey();
+
+        const unsubscribePod = onSnapshot(
+            podRef,
+            (snapshot) => {
+                const data = snapshot.data() as { memberIds?: string[] } | undefined;
+                setPodMemberCount(Array.isArray(data?.memberIds) ? data.memberIds.length : 0);
+            },
+            () => {
+                setPodMemberCount(0);
+            },
+        );
+
+        const unsubscribePodCheckins = onSnapshot(
+            podCheckinsQuery,
+            (snapshot) => {
+                const checkedInUserIds = new Set(
+                    snapshot.docs
+                        .map((docSnapshot) => docSnapshot.data() as { userId?: string; date?: string })
+                        .filter((checkin) => checkin.date === todayKey && checkin.userId)
+                        .map((checkin) => checkin.userId as string),
+                );
+
+                setCheckedInTodayCount(checkedInUserIds.size);
+            },
+            () => {
+                setCheckedInTodayCount(0);
+            },
+        );
+
+        return () => {
+            unsubscribePod();
+            unsubscribePodCheckins();
+        };
+    }, [currentPodId]);
+
+    const weeklySummaryMessage =
+        weeklyCheckInCount > 0
+            ? "Consistency grows quietly."
+            : "Your next check-in starts the week.";
 
     async function handleCheckIn(status: CheckInStatus) {
         if (!currentUserId) {
@@ -313,84 +385,114 @@ export default function HomeScreen() {
         <View style={styles.root}>
             <StatusBar style="dark" />
             <SafeAreaView edges={["top"]} style={styles.safeTop}>
-                <View style={styles.content}>
-                    <View style={styles.topRow}>
-                        <Text style={styles.greeting}>{greetingText}</Text>
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={styles.content}>
+                        <View style={styles.topRow}>
+                            <Text style={styles.greeting}>{greetingText}</Text>
+                            <TouchableOpacity
+                                style={styles.bellButton}
+                                activeOpacity={0.85}
+                                onPress={() => {
+                                    router.push("/notifications");
+                                }}
+                            >
+                                <Feather name="bell" size={30} color="#5E6A75" />
+                            </TouchableOpacity>
+                        </View>
+
                         <TouchableOpacity
-                            style={styles.bellButton}
-                            activeOpacity={0.85}
+                            activeOpacity={isHabitLoading ? 1 : 0.9}
                             onPress={() => {
-                                router.push("/notifications");
+                                if (!isHabitLoading) {
+                                    router.push(habitSetupPath);
+                                }
                             }}
                         >
-                            <Feather name="bell" size={30} color="#5E6A75" />
+                            <LinearGradient
+                                colors={["#A8C9B8", "#2F6F6D"]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.goalCard}
+                            >
+                                <Text style={styles.goalTitle}>
+                                    {isHabitLoading ? "Loading your habit..." : habitTitle}
+                                </Text>
+                                <Text style={styles.goalMeta}>{goalMetaText}</Text>
+                            </LinearGradient>
                         </TouchableOpacity>
+
+                        <Text style={styles.prompt}>How did today go?</Text>
+
+                        <View style={styles.options}>
+                            <CheckInCard
+                                title="Done"
+                                subtitle="Completed my goal"
+                                icon="check-circle"
+                                backgroundColor="#7DB38E"
+                                selected={todayCheckInStatus === "done"}
+                                disabled={isSavingCheckIn}
+                                onPress={() => {
+                                    void handleCheckIn("done");
+                                }}
+                            />
+                            <CheckInCard
+                                title="Partial"
+                                subtitle="Made some progress"
+                                icon="circle"
+                                iconDashed
+                                backgroundColor="#E0BF78"
+                                selected={todayCheckInStatus === "partial"}
+                                disabled={isSavingCheckIn}
+                                onPress={() => {
+                                    void handleCheckIn("partial");
+                                }}
+                            />
+                            <CheckInCard
+                                title="Missed"
+                                subtitle="Not today"
+                                icon="circle"
+                                backgroundColor="#B6A6CC"
+                                selected={todayCheckInStatus === "missed"}
+                                disabled={isSavingCheckIn}
+                                onPress={() => {
+                                    void handleCheckIn("missed");
+                                }}
+                            />
+                        </View>
+
+                        {checkInFeedback && (
+                            <Text style={styles.checkInFeedback}>{checkInFeedback}</Text>
+                        )}
+
+                        <View style={styles.summaryCards}>
+                            <View style={styles.summaryCard}>
+                                <View style={styles.summaryCardHeader}>
+                                    <Text style={styles.summaryCardTitle}>Pod activity</Text>
+                                    <Text style={styles.summaryCardMeta}>Today</Text>
+                                </View>
+                                <Text style={styles.summaryCardValue}>
+                                    {checkedInTodayCount} of {podMemberCount || 0}
+                                </Text>
+                                <Text style={styles.summaryCardBody}>checked in so far</Text>
+                            </View>
+
+                            <View style={styles.summaryCard}>
+                                <Text style={styles.summaryCardTitle}>This week</Text>
+                                <Text style={styles.weekSummaryBody}>
+                                    You checked in{" "}
+                                    <Text style={styles.weekSummaryHighlight}>
+                                        {weeklyCheckInCount} {pluralizeTime(weeklyCheckInCount)}
+                                    </Text>{" "}
+                                    this week.
+                                </Text>
+                                <Text style={styles.weekSummaryFooter}>{weeklySummaryMessage}</Text>
+                            </View>
+                        </View>
                     </View>
-
-                    <TouchableOpacity
-                        activeOpacity={isHabitLoading ? 1 : 0.9}
-                        onPress={() => {
-                            if (!isHabitLoading) {
-                                router.push(habitSetupPath);
-                            }
-                        }}
-                    >
-                        <LinearGradient
-                            colors={["#A8C9B8", "#2F6F6D"]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.goalCard}
-                        >
-                            <Text style={styles.goalTitle}>
-                                {isHabitLoading ? "Loading your habit..." : habitTitle}
-                            </Text>
-                            <Text style={styles.goalMeta}>{goalMetaText}</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
-
-                    <Text style={styles.prompt}>How did today go?</Text>
-
-                    <View style={styles.options}>
-                        <CheckInCard
-                            title="Done"
-                            subtitle="Completed my goal"
-                            icon="check-circle"
-                            backgroundColor="#7DB38E"
-                            selected={todayCheckInStatus === "done"}
-                            disabled={isSavingCheckIn}
-                            onPress={() => {
-                                void handleCheckIn("done");
-                            }}
-                        />
-                        <CheckInCard
-                            title="Partial"
-                            subtitle="Made some progress"
-                            icon="circle"
-                            iconDashed
-                            backgroundColor="#E0BF78"
-                            selected={todayCheckInStatus === "partial"}
-                            disabled={isSavingCheckIn}
-                            onPress={() => {
-                                void handleCheckIn("partial");
-                            }}
-                        />
-                        <CheckInCard
-                            title="Missed"
-                            subtitle="Not today"
-                            icon="circle"
-                            backgroundColor="#B6A6CC"
-                            selected={todayCheckInStatus === "missed"}
-                            disabled={isSavingCheckIn}
-                            onPress={() => {
-                                void handleCheckIn("missed");
-                            }}
-                        />
-                    </View>
-
-                    {checkInFeedback && (
-                        <Text style={styles.checkInFeedback}>{checkInFeedback}</Text>
-                    )}
-                </View>
+                </ScrollView>
             </SafeAreaView>
         </View>
     );
@@ -404,8 +506,10 @@ const styles = StyleSheet.create({
     safeTop: {
         flex: 1,
     },
+    scrollContent: {
+        paddingBottom: 24,
+    },
     content: {
-        flex: 1,
         width: "100%",
         maxWidth: 520,
         alignSelf: "center",
@@ -509,5 +613,72 @@ const styles = StyleSheet.create({
         fontSize: 14,
         lineHeight: 20,
         fontFamily: "Inter_500Medium",
+    },
+    summaryCards: {
+        marginTop: 22,
+        gap: 16,
+    },
+    summaryCard: {
+        borderRadius: 24,
+        backgroundColor: "#FBFAF9",
+        paddingHorizontal: 20,
+        paddingVertical: 18,
+        shadowColor: "#22313D",
+        shadowOffset: {
+            width: 0,
+            height: 8,
+        },
+        shadowOpacity: 0.04,
+        shadowRadius: 18,
+        elevation: 1,
+    },
+    summaryCardHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    summaryCardTitle: {
+        color: "#25323E",
+        fontSize: 21,
+        lineHeight: 27,
+        fontFamily: "Inter_600SemiBold",
+    },
+    summaryCardMeta: {
+        color: "#5C6874",
+        fontSize: 17,
+        lineHeight: 22,
+        fontFamily: "Inter_500Medium",
+    },
+    summaryCardValue: {
+        marginTop: 14,
+        color: "#2E7876",
+        fontSize: 28,
+        lineHeight: 33,
+        fontFamily: "Inter_500Medium",
+    },
+    summaryCardBody: {
+        marginTop: 10,
+        color: "#5C6874",
+        fontSize: 17,
+        lineHeight: 24,
+        fontFamily: "Inter_400Regular",
+    },
+    weekSummaryBody: {
+        marginTop: 16,
+        color: "#5C6874",
+        fontSize: 17,
+        lineHeight: 28,
+        fontFamily: "Inter_400Regular",
+    },
+    weekSummaryHighlight: {
+        color: "#2E7876",
+        fontFamily: "Inter_500Medium",
+    },
+    weekSummaryFooter: {
+        marginTop: 2,
+        color: "#5C6874",
+        fontSize: 17,
+        lineHeight: 28,
+        fontFamily: "Inter_400Regular",
     },
 });
