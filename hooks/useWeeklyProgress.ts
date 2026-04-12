@@ -14,6 +14,7 @@ export type BasicCheckIn = {
 type PodSupportEntry = {
     createdAt: Date | null;
     fromUserId: string | null;
+    message: string;
 };
 
 export type WeekDay = {
@@ -110,6 +111,12 @@ export function pluralizeReaction(count: number) {
 
 export function pluralizeTime(count: number) {
     return count === 1 ? "time" : "times";
+}
+
+export function stripLeadingEmoji(message: string) {
+    return message
+        .replace(/^[^\p{L}\p{N}]+/u, "")
+        .trim();
 }
 
 export function getHeroMessage(checkInCount: number, missedCount: number) {
@@ -456,12 +463,17 @@ export function useWeeklyProgressData() {
                     const data = docSnapshot.data() as {
                         createdAt?: unknown;
                         fromUserId?: unknown;
+                        message?: unknown;
                     };
 
                     return {
                         createdAt: toDate(data.createdAt),
                         fromUserId:
                             typeof data.fromUserId === "string" ? data.fromUserId : null,
+                        message:
+                            typeof data.message === "string" && data.message.trim()
+                                ? data.message.trim()
+                                : "You got this",
                     };
                 });
 
@@ -501,6 +513,28 @@ export function useWeeklyProgressData() {
 
         return entry.fromUserId !== currentUserId;
     }).length;
+    const weeklySupportMessages = Array.from(
+        new Set(
+            podSupportEntries
+                .filter((entry) => {
+                    if (!entry.createdAt || !isDateWithinWeek(entry.createdAt, weekStart)) {
+                        return false;
+                    }
+
+                    if (!currentUserId) {
+                        return true;
+                    }
+
+                    return entry.fromUserId !== currentUserId;
+                })
+                .sort(
+                    (a, b) =>
+                        (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
+                )
+                .map((entry) => stripLeadingEmoji(entry.message))
+                .filter(Boolean),
+        ),
+    ).slice(0, 2);
     const movingForwardMessage = getMovingForwardMessage({
         checkInCount,
         partialCount,
@@ -527,6 +561,7 @@ export function useWeeklyProgressData() {
         checkInCount,
         podActiveDays,
         podSupportCount,
+        weeklySupportMessages,
         heroMessage,
         recoveryInsight,
         movingForwardMessage,

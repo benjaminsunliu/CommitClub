@@ -234,7 +234,7 @@ export default function CheckInFeedbackScreen() {
                     {config.showRecoveryCta && (
                         <Pressable
                             onPress={() => {
-                                router.replace("/(tabs)/progress");
+                                router.replace("/recovery-tips");
                             }}
                             style={({ pressed }) => [
                                 styles.actionButton,
