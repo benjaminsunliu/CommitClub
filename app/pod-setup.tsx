@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppButton } from "@/components/AppButton";
+import { logoutUser } from "@/services/authService";
 import { joinPodWithInviteCode } from "@/services/podService";
 
 const createPodPath = "/pod-create" as Href;
@@ -73,6 +74,8 @@ export default function PodSetupScreen() {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [isJoiningPod, setIsJoiningPod] = useState(false);
   const [showJoinForm, setShowJoinForm] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   const normalizedInviteCode = useMemo(
     () => inviteCode.trim().toUpperCase(),
@@ -97,6 +100,24 @@ export default function PodSetupScreen() {
     }
   }
 
+  async function handleSignOut() {
+    if (isJoiningPod || isSigningOut) {
+      return;
+    }
+
+    setJoinError(null);
+    setSignOutError(null);
+    setIsSigningOut(true);
+
+    try {
+      await logoutUser();
+    } catch {
+      setSignOutError("Could not sign out. Please try again.");
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="dark" />
@@ -115,7 +136,7 @@ export default function PodSetupScreen() {
               title="Create a pod"
               subtitle="Start your own private circle"
               onPress={() => router.push(createPodPath)}
-              disabled={isJoiningPod}
+              disabled={isJoiningPod || isSigningOut}
             />
 
             <PodOptionCard
@@ -124,7 +145,7 @@ export default function PodSetupScreen() {
               subtitle="Enter your friend's code"
               onPress={() => setShowJoinForm(true)}
               loading={isJoiningPod}
-              disabled={isJoiningPod}
+              disabled={isJoiningPod || isSigningOut}
             />
 
             {showJoinForm && (
@@ -137,14 +158,14 @@ export default function PodSetupScreen() {
                   placeholder="Invite code"
                   placeholderTextColor="#7A8690"
                   style={styles.inviteInput}
-                  editable={!isJoiningPod}
+                  editable={!isJoiningPod && !isSigningOut}
                   maxLength={12}
                 />
 
                 <AppButton
                   label={isJoiningPod ? "Joining..." : "Join pod"}
                   onPress={handleJoinPod}
-                  disabled={isJoiningPod}
+                  disabled={isJoiningPod || isSigningOut}
                   size="tall"
                   style={styles.joinButton}
                 />
@@ -152,6 +173,27 @@ export default function PodSetupScreen() {
                 {joinError && <Text style={styles.errorText}>{joinError}</Text>}
               </View>
             )}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.signOutButton,
+                pressed && !isSigningOut && styles.signOutButtonPressed,
+                isSigningOut && styles.signOutButtonDisabled,
+              ]}
+              onPress={handleSignOut}
+              disabled={isSigningOut}
+              accessibilityRole="button"
+              accessibilityLabel={isSigningOut ? "Signing out" : "Sign out"}
+            >
+              <View style={styles.signOutIconWrap}>
+                <Feather name="log-out" size={22} color="#6A7680" />
+              </View>
+              <Text style={styles.signOutButtonText}>
+                {isSigningOut ? "Signing out..." : "Sign out"}
+              </Text>
+            </Pressable>
+
+            {signOutError && <Text style={styles.signOutError}>{signOutError}</Text>}
           </View>
         </View>
       </ScrollView>
@@ -268,5 +310,45 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: "Inter_500Medium",
     marginTop: 2,
+  },
+  signOutButton: {
+    marginTop: 6,
+    minHeight: 72,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#DCE1E4",
+    backgroundColor: "#FBFAF9",
+    alignItems: "center",
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    gap: 14,
+  },
+  signOutButtonPressed: {
+    opacity: 0.84,
+  },
+  signOutButtonDisabled: {
+    opacity: 0.72,
+  },
+  signOutButtonText: {
+    color: "#64717C",
+    fontFamily: "Inter_500Medium",
+    fontSize: 17,
+    lineHeight: 22,
+  },
+  signOutIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#F1F3F4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  signOutError: {
+    marginTop: 6,
+    textAlign: "center",
+    color: "#B23A3A",
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
