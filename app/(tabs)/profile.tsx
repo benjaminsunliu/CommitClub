@@ -18,6 +18,7 @@ import { auth, db } from "@/services/firebase";
 import { logoutUser } from "@/services/authService";
 
 const landingPath = "/" as Href;
+const habitSetupPath = "/habit-setup" as Href;
 
 type HabitRecord = {
     title: string;
@@ -256,7 +257,15 @@ export default function ProfileScreen() {
                         </Text>
                     </View>
 
-                    <View style={styles.habitCard}>
+                    <Pressable
+                        style={({ pressed }) => [
+                            styles.habitCard,
+                            pressed && styles.settingCardPressed,
+                        ]}
+                        onPress={() => {
+                            router.push(habitSetupPath);
+                        }}
+                    >
                         <Text style={styles.habitHeader}>Current habit</Text>
                         <View style={styles.habitRow}>
                             <View style={styles.habitIconWrap}>
@@ -276,11 +285,18 @@ export default function ProfileScreen() {
                                 <Text style={styles.habitMeta}>
                                     {currentHabit
                                         ? `Daily • ${getCategoryLabel(currentHabit.category)}`
-                                        : "Create your first habit from pod setup"}
+                                        : "Tap to set up your habit"}
                                 </Text>
                             </View>
+
+                            <Feather
+                                name="chevron-right"
+                                size={22}
+                                color="#8D99A3"
+                                style={styles.habitChevron}
+                            />
                         </View>
-                    </View>
+                    </Pressable>
 
                     <SettingCard
                         icon="user"
@@ -427,6 +443,9 @@ const styles = StyleSheet.create({
     },
     habitTextWrap: {
         flex: 1,
+    },
+    habitChevron: {
+        marginLeft: 8,
     },
     habitTitle: {
         color: "#25323E",

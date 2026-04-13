@@ -20,6 +20,7 @@ import {
 } from "@/services/habitService";
 
 const homePath = "/(tabs)/home" as Href;
+const profilePath = "/(tabs)/profile" as Href;
 
 const habitCategories = [
   { id: "study", label: "Study", icon: "book-open" as const },
@@ -147,6 +148,15 @@ export default function HabitSetupScreen() {
     }
   }
 
+  function handleBack() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace(hasExistingHabit ? profilePath : homePath);
+  }
+
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="dark" />
@@ -158,9 +168,22 @@ export default function HabitSetupScreen() {
       >
         <View style={styles.panel}>
           <View>
-            <Text style={styles.title}>
-              {hasExistingHabit ? "Edit your habit" : "Set up your habit"}
-            </Text>
+            <View style={styles.headerRow}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.backButton,
+                  pressed && styles.backButtonPressed,
+                ]}
+                onPress={handleBack}
+                disabled={isBusy}
+              >
+                <Feather name="arrow-left" size={30} color="#25323E" />
+              </Pressable>
+              <Text style={styles.title}>
+                {hasExistingHabit ? "Edit your habit" : "Set up your habit"}
+              </Text>
+            </View>
+
             <Text style={styles.subtitle}>
               {hasExistingHabit
                 ? "Update your habit or remove it for now."
@@ -286,6 +309,22 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     justifyContent: "space-between",
     minHeight: 760,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    marginLeft: -6,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  backButtonPressed: {
+    opacity: 0.72,
   },
   title: {
     color: "#25323E",
