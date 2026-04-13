@@ -287,3 +287,70 @@ export async function joinPodWithInviteCode(rawInviteCode: string) {
 
   return { podId: podDocument.id };
 }
+
+export async function leaveCurrentPod() {
+  const authUser = getSignedInUser();
+  const userId = authUser.uid;
+  const userRef = doc(db, "users", userId);
+
+  await runTransaction(db, async (transaction) => {
+    const userSnapshot = await transaction.get(userRef);
+
+    if (!userSnapshot.exists()) {
+      transaction.set(
+        userRef,
+        {
+          ...createDefaultProfile(authUser),
+          podId: null,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      return;
+    }
+
+    const userData = userSnapshot.data() as { podId?: string | null };
+    const podId = userData.podId ?? null;
+
+    if (!podId) {
+      transaction.set(
+        userRef,
+        {
+          podId: null,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      return;
+    }
+
+    const podRef = doc(db, "pods", podId);
+    const podSnapshot = await transaction.get(podRef);
+
+    if (podSnapshot.exists()) {
+      const podData = podSnapshot.data() as { memberIds?: string[] };
+      const memberIds = Array.isArray(podData.memberIds) ? podData.memberIds : [];
+      const nextMemberIds = memberIds.filter((memberId) => memberId !== userId);
+
+      if (nextMemberIds.length === 0) {
+        transaction.delete(podRef);
+      } else if (nextMemberIds.length !== memberIds.length) {
+        transaction.update(podRef, {
+          memberIds: nextMemberIds,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+
+    transaction.set(
+      userRef,
+      {
+        podId: null,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  });
+
+  return { leftPod: true };
+}

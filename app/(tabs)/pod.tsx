@@ -1,5 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather, Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -29,6 +30,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "@/services/firebase";
 
 const MAX_POD_MEMBERS = 4;
+const podSettingsPath = "/pod-settings" as const;
 const supportiveReactions = [
     {
         id: "you-got-this",
@@ -550,7 +552,23 @@ export default function PodScreen() {
                 showsVerticalScrollIndicator={false}
             >
                 <View style={styles.panel}>
-                    <Text style={styles.podTitle}>{podName}</Text>
+                    <View style={styles.headerRow}>
+                        <Text style={styles.podTitle}>{podName}</Text>
+
+                        <Pressable
+                            style={({ pressed }) => [
+                                styles.settingsButton,
+                                pressed && styles.settingsButtonPressed,
+                            ]}
+                            onPress={() => {
+                                router.push(podSettingsPath);
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Open pod settings"
+                        >
+                            <Feather name="settings" size={24} color="#25323E" />
+                        </Pressable>
+                    </View>
 
                     <View style={styles.membersCard}>
                         <View style={styles.membersHeadingRow}>
@@ -700,11 +718,31 @@ const styles = StyleSheet.create({
         alignSelf: "center",
         gap: 14,
     },
+    headerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+    },
     podTitle: {
         color: "#25323E",
         fontFamily: "Fraunces_600SemiBold",
         fontSize: 28,
         lineHeight: 34,
+        flex: 1,
+    },
+    settingsButton: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: "#FBFAF9",
+        borderWidth: 1,
+        borderColor: "#ECE7DF",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    settingsButtonPressed: {
+        opacity: 0.8,
     },
     membersCard: {
         borderRadius: 24,
