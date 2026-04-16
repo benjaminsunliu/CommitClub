@@ -22,6 +22,12 @@ CommitClub is an HCI prototype that helps students stay consistent with daily ha
 - **Firebase Authentication** for user sign-in and sign-up
 - **Cloud Firestore** for storing user, habit, and pod data
 
+## Prerequisites
+
+- Node.js `20.19+` and npm installed locally
+- Expo Go on a physical device, or an iOS Simulator / Android Emulator
+- A Firebase project with a valid API key
+
 ## Setup
 
 1. Clone the repository:
